@@ -3,6 +3,13 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createRoom } from "../three/createRoom";
 import PromptForm from "./PromptForm";
+import Toolbar from "./Toolbar";
+
+export type HistoryEntry = {
+  id: string;
+  prompt: string;
+  image: string;
+};
 
 export default function Scene() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -12,6 +19,7 @@ export default function Scene() {
   const [prompt, setPrompt] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -107,6 +115,12 @@ export default function Scene() {
       hoveredRef.current = hit;
     }
 
+    function handlePointerLeave(): void {
+      highlightMesh.visible = false;
+      renderer.domElement.style.cursor = "default";
+      hoveredRef.current = null;
+    }
+
     function moveHighlightTo(mesh: THREE.Mesh) {
       mesh.updateWorldMatrix(true, false);
 
@@ -141,6 +155,7 @@ export default function Scene() {
     renderer.domElement.addEventListener("click", handleClick);
     renderer.domElement.addEventListener("pointermove", handlePointerMove);
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
+    renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
     scene.add(room);
     const highlightMesh = new THREE.Mesh<
       THREE.BufferGeometry,
@@ -189,8 +204,29 @@ export default function Scene() {
       selectionOutline.geometry.dispose();
       selectionOutline.material.dispose();
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
+      renderer.domElement.removeEventListener(
+        "pointerleave",
+        handlePointerLeave,
+      );
     };
   }, []);
+
+  async function applyTexture(base64: string) {
+    const image = new Image();
+    image.src = `data:image/png;base64,${base64}`;
+    await image.decode();
+
+    const texture = new THREE.Texture(image);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(3, 3);
+    texture.needsUpdate = true;
+
+    if (targetMaterialRef.current) {
+      targetMaterialRef.current.map = texture;
+      targetMaterialRef.current.needsUpdate = true;
+    }
+  }
 
   async function handleGenerate() {
     setIsLoading(true);
@@ -205,28 +241,27 @@ export default function Scene() {
       );
       const data = await response.json();
 
-      const image = new Image();
-      image.src = `data:image/png;base64,${data.image}`;
-      await image.decode();
+      await applyTexture(data.image);
 
-      const texture = new THREE.Texture(image);
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(3, 3);
-      texture.needsUpdate = true;
-
-      if (targetMaterialRef.current) {
-        targetMaterialRef.current.map = texture;
-        targetMaterialRef.current.needsUpdate = true;
-      }
+      setHistory((prev) =>
+        [{ id: crypto.randomUUID(), prompt, image: data.image }, ...prev].slice(
+          0,
+          10,
+        ),
+      );
     } finally {
       setIsLoading(false);
     }
   }
 
+  function handleSelectHistory(entry: HistoryEntry) {
+    void applyTexture(entry.image);
+  }
+
   return (
     <>
       <div ref={containerRef} style={{ width: "100vw", height: "100vh" }} />
+      <Toolbar history={history} onSelect={handleSelectHistory} />
       {panelOpen && (
         <div className="prompt-panel">
           <PromptForm
