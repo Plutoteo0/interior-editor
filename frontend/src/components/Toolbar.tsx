@@ -19,7 +19,7 @@ export default function Toolbar({ history, onSelect }: ToolbarProps) {
     event: React.MouseEvent<HTMLDivElement>,
   ): void {
     const coordinates = event.currentTarget.getBoundingClientRect();
-    const previewHalfWidth = 160; // половина от width: 320px в .history-preview
+    const previewHalfWidth = 160;
     const rawLeft = coordinates.left + coordinates.width / 2;
     const left = Math.min(
       Math.max(rawLeft, previewHalfWidth),
