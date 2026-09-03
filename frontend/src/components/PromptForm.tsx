@@ -12,7 +12,7 @@ export default function PromptForm({
   isLoading,
 }: PromptFormProps) {
   return (
-    <div style={{ position: "absolute", top: 30, left: 16 }}>
+    <>
       <input
         value={prompt}
         onChange={(e) => onPromptChange(e.target.value)}
@@ -21,6 +21,6 @@ export default function PromptForm({
       <button onClick={onGenerate} disabled={isLoading}>
         {isLoading ? "Generating..." : "Generate Texture"}
       </button>
-    </div>
+    </>
   );
 }
