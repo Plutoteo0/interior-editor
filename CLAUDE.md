@@ -67,6 +67,109 @@
 доработать качество seamless (шаг 4) или переходить к следующему треку
 после того как явно решим закрыть MVP-цикл.
 
+**2026-09-15 — в работе: Photoshop-style тулбар + история сгенерированных
+текстур.** Делается пошагово, вручную (Claude объясняет и проверяет, код
+пишет пользователь). План:
+
+- Тулбар — вертикальный, слева, иконки через `lucide-react`. Кнопки:
+  Select (заглушка-индикатор), Generate (открывает `PromptForm`), History
+  (открывает докед-панель справа), + 2 disabled-заглушки под будущие
+  инструменты (move, reset material).
+- История — **per-surface** (своя у каждой стены/пола), хранится только
+  в памяти (React state), не переживает перезагрузку страницы, без
+  backend (не нарушает принцип "backend — только прокси"). Ключ —
+  `mesh.uuid` выбранной поверхности (`selectedRef.current`), не заводили
+  отдельных id в `createRoom.ts`.
+- History-панель: докед-панель справа (`position: fixed`, не модалка),
+  список записей = превью + текст промпта, клик по записи повторно
+  применяет эту текстуру на текущую поверхность (без нового запроса к SD).
+- Дефолт: при инициализации сцены `selectedRef.current` сразу указывает
+  на пол (`floorMesh`, теперь возвращается из `createRoom()` вместе с
+  `room`/`floorMaterial`) — не нужно спецкейсить "ничего не выбрано" для
+  дефолтного состояния. Но снятие выбора (клик по пустоте / повторный
+  клик по той же поверхности → `selectedRef.current = null`) сознательно
+  **оставили как есть** — Toolbar/History должны обрабатывать `null`
+  через проп `hasSelection` (дизейблит кнопки Generate/History).
+
+**Сделано (Шаг 1, в `frontend/src/`):**
+- `types.ts` — добавлен тип `HistoryEntry` (`id`, `prompt`, `imageBase64`,
+  `timestamp`).
+- `three/createRoom.ts` — возвращаемый тип и `return` расширены
+  `floorMesh: THREE.Mesh` (сам `floor`-mesh, не только материал).
+- `components/Scene.tsx`:
+  - Новый state: `historyBySurface: Record<string, HistoryEntry[]>`,
+    `isHistoryOpen`; `panelOpen` переименован в `isGenerateOpen` (был
+    рассинхрон переменная/сеттер в процессе правки — исправлено).
+  - При инициализации сцены: `selectedRef.current = floorMesh` (дефолт).
+  - Общая функция `applyTextureToMaterial(material, imageBase64)` —
+    вынесена из `handleGenerate`, переиспользуется и для истории (без
+    похода на backend).
+  - `handleGenerate` теперь также пишет новую запись в
+    `historyBySurface[selectedRef.current.uuid]` (в начало массива) и
+    ранний return, если `targetMaterialRef.current`/`selectedRef.current`
+    пустые.
+  - Новая `handleApplyFromHistory(entry)` — применяет `entry.imageBase64`
+    на `targetMaterialRef.current` без нового запроса. Пока нигде не
+    вызывается (понадобится в `HistoryPanel`).
+
+Шаг 2 доведён до конца: `lucide-react` поставлен, `components/Toolbar.tsx`
+и `components/HistoryPanel.tsx` написаны и подключены в `Scene.tsx`,
+CSS-классы `.toolbar`/`.toolbar-button`/`.active`/`.history-panel`/
+`.history-entry` добавлены в `index.css` (тёмная Photoshop-эстетика).
+
+**2026-09-16 — Toolbar доведён до полностью рабочего состояния (кнопки
+Select/Move/Reset), плюс два бага полировки (зум, растягивание текстур).**
+
+- **Select и Move теперь взаимоисключающие инструменты** (как в
+  Photoshop, активен только один), а не независимые тумблеры — заведено
+  через единый `activeTool: "select" | "move"` (state) +
+  `activeToolRef` (синхронизированный ref, нужен потому что обработчики
+  клика/наведения объявлены внутри `useEffect` с пустыми deps и не видят
+  свежий React state напрямую — classic stale closure).
+  - **Select** (дефолт) — обычное поведение: hover-подсветка + клик
+    выбирает поверхность. Выключение (переключение на Move) **сбрасывает
+    текущий выбор** (`selectedRef`/`targetMaterialRef` в `null`, прячет
+    `selectionOutline`, закрывает Generate-панель) — так по явному
+    запросу пользователя, не тихая деталь.
+  - **Move** — `OrbitControls.mouseButtons` переключаются на лету:
+    в Select ЛКМ = ROTATE, ПКМ = PAN; в Move — наоборот (ЛКМ = PAN,
+    ПКМ = ROTATE). Нужен отдельный `controlsRef`, т.к. `controls`
+    создаётся внутри того же `useEffect` со scene-сетапом.
+  - **Reset material** — просто `material.map = null` + `needsUpdate`:
+    `material.color` никогда не трогается при наложении текстуры, так что
+    сброс карты сам по себе возвращает дефолтный цвет, без нужды хранить
+    "исходный" материал отдельно.
+- **Кастомный zoom колёсиком** — встроенный dolly-zoom OrbitControls
+  мультипликативный (каждое деление колеса домножает дистанцию на
+  коэффициент), из-за чего шаг зума ощутимо уменьшается по мере
+  приближения к цели. `controls.enableZoom = false` + свой `wheel`-хендлер,
+  двигающий камеру вдоль `camera.getWorldDirection()` на константный шаг
+  (с `minDistance`/`maxDistance` клампом) — даёт равномерный зум.
+- **Фикс растягивания текстур на стенах.** Причина: пол квадратный
+  (10×10), стены — нет (10×3), а `texture.repeat` был захардкожен
+  `(3, 3)` для любой поверхности; на стене это давало тайлы 3.33:1
+  вместо квадратных. Фикс — `repeat` считается от реальных размеров
+  поверхности (`geometry.parameters.width/height`, доступны у
+  `PlaneGeometry` из момента создания) делённых на константу `tileSize`
+  (сейчас `2`, метров на один тайл). Из-за этого `applyTextureToMaterial`
+  стала принимать `mesh` вместо голого `material` — геометрия нужна
+  только через mesh.
+- **Побочная деталь окружения (не код):** Forge не запускался с ошибкой
+  `ImportError: DLL load failed ... Политика управления приложениями
+  заблокировала этот файл` — это Windows 11 **Smart App Control**
+  (`HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy
+  VerifiedAndReputablePolicyState = 1`), блокирующий неподписанные
+  `.pyd`/DLL по всей системе, а не Mark-of-the-Web конкретного файла
+  (`Unblock-File` тут бесполезен). Выключается только вручную:
+  Параметры → Конфиденциальность и безопасность → Безопасность Windows →
+  Управление приложениями и браузером → Smart App Control → Выкл
+  (необратимо без переустановки Windows — так предупреждает сама ОС).
+
+**Следующий шаг (не начато):** MVP-цикл 1-3 + Toolbar/History-полировка
+закрыты end-to-end. Дальше — либо ещё улучшать качество seamless-текстур
+(шаг 4 из "Текущий приоритет"), либо явно решить закрыть MVP и перейти к
+следующему треку (3D-реконструкция через Polycam/KIRI и т.д.).
+
 ## Стек
 
 - **Frontend:** React + Vite + Three.js — TypeScript/JavaScript

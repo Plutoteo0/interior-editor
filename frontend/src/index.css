@@ -1,6 +1,6 @@
 .prompt-panel {
   position: fixed;
-  left: 16px;
+  left: 76px;
   top: 50%;
   transform: translateY(-50%);
   width: 300px;
@@ -41,4 +41,96 @@
 .prompt-panel button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.toolbar {
+  position: fixed;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  padding: 8px;
+  background: #1f1f1f;
+  border: 1px solid #383838;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.toolbar-button {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #eaeaea;
+  cursor: pointer;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  background: #2a2a2a;
+}
+
+.toolbar-button.active {
+  background: #4f7cff;
+  color: white;
+}
+
+.toolbar-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.history-panel {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 240px;
+  max-height: 80vh;
+  overflow-y: auto;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  padding: 12px;
+  background: #1f1f1f;
+  color: #eaeaea;
+  border: 1px solid #383838;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, sans-serif;
+}
+
+.history-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.history-entry:hover {
+  background: #2a2a2a;
+}
+
+.history-entry img {
+  width: 100%;
+  border-radius: 6px;
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+}
+
+.history-entry span {
+  font-size: 13px;
+  color: #b5b5b5;
 }

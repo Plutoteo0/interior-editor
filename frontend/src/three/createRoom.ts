@@ -3,6 +3,7 @@ import * as THREE from "three";
 export function createRoom(): {
   room: THREE.Group;
   floorMaterial: THREE.MeshStandardMaterial;
+  floorMesh: THREE.Mesh;
 } {
   const room = new THREE.Group();
 
@@ -37,5 +38,5 @@ export function createRoom(): {
   rightWall.rotation.y = -Math.PI / 2;
   room.add(rightWall);
 
-  return { room, floorMaterial };
+  return { room, floorMaterial, floorMesh: floor };
 }
